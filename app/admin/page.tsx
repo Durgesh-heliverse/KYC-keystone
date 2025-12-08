@@ -29,7 +29,7 @@ export default function AdminDashboard() {
     googleLocationUrl: '',
   });
 
-  const categories: Category[] = ['Police', 'Fire', 'Ambulance', 'Hospital', 'Emergency'];
+  const categories: Category[] = ['Police', 'Fire', 'Hospital'];
 
   const handleAdd = () => {
     setEditingResponder(null);
@@ -182,24 +182,6 @@ export default function AdminDashboard() {
               ))}
             </select>
             <select
-              value={filters.city}
-              onChange={(e) => setFilters({ ...filters, city: e.target.value })}
-              className="px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none cursor-pointer"
-              style={{
-                backgroundImage:
-                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236b7280' viewBox='0 0 24 24'><path d='M6.707 9.293 12 14.586l5.293-5.293 1.414 1.414L12 17.414l-6.707-6.707z'/></svg>\")",
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'calc(100% - 12px) center',
-              }}
-            >
-              <option value="">All Cities</option>
-              {availableCities.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
-            <select
               value={filters.state}
               onChange={(e) => setFilters({ ...filters, state: e.target.value })}
               className="px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none cursor-pointer"
@@ -217,6 +199,25 @@ export default function AdminDashboard() {
                 </option>
               ))}
             </select>
+            <select
+              value={filters.city}
+              onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+              className="px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none cursor-pointer"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236b7280' viewBox='0 0 24 24'><path d='M6.707 9.293 12 14.586l5.293-5.293 1.414 1.414L12 17.414l-6.707-6.707z'/></svg>\")",
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'calc(100% - 12px) center',
+              }}
+            >
+              <option value="">All Cities</option>
+              {availableCities.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+            
           </div>
         </div>
 

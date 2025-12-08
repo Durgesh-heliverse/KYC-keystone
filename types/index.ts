@@ -17,7 +17,14 @@ export interface FirstResponder {
 export interface FilterState {
   title: string;
   category: Category | 'All';
+  categories?: Category[];
   city: string;
   state: string;
+}
+
+export interface GeoSuggestion {
+  label: string;
+  lat: number;
+  lon: number;
 }
 

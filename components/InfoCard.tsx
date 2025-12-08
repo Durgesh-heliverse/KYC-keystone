@@ -5,10 +5,11 @@ import { Phone, Globe, MapPin, X } from 'lucide-react';
 
 interface InfoCardProps {
   responder: FirstResponder;
+  distanceKm?: number;
   onClose: () => void;
 }
 
-export default function InfoCard({ responder, onClose }: InfoCardProps) {
+export default function InfoCard({ responder, distanceKm, onClose }: InfoCardProps) {
   const handleCall = () => {
     window.location.href = `tel:${responder.phoneNumber}`;
   };
@@ -72,6 +73,9 @@ export default function InfoCard({ responder, onClose }: InfoCardProps) {
           <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-gray-700">{responder.address}</p>
         </div>
+        {typeof distanceKm === 'number' && (
+          <p className="text-sm text-blue-600 font-medium">{distanceKm.toFixed(1)} km away</p>
+        )}
         <div className="flex items-center gap-2">
           <Phone className="w-5 h-5 text-gray-400" />
           <a

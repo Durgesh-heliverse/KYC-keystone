@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Keystone GeoResponse - First Responders Map',
   description: 'Interactive map of First Responders across India',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

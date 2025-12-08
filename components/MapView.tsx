@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import Image from 'next/image';
 import { Shield, MapPin, Navigation, Menu, X, Settings, Eye, EyeOff } from 'lucide-react';
 import { FirstResponder, FilterState } from '@/types';
 import { dummyFirstResponders } from '@/data/dummyData';
@@ -46,9 +47,14 @@ export default function MapView() {
   const [adminPassword, setAdminPassword] = useState('demo1234');
   const [showPassword, setShowPassword] = useState(false);
   const [adminError, setAdminError] = useState('');
+  const [searchSuggestions, setSearchSuggestions] = useState<{ label: string; lat: number; lon: number }[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOrigin, setSearchOrigin] = useState<[number, number] | null>(null);
+  const [distances, setDistances] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<FilterState>({
     title: '',
     category: 'All',
+    categories: [],
     city: '',
     state: '',
   });
@@ -74,7 +80,7 @@ export default function MapView() {
   useEffect(() => {
     let filtered = [...responders];
 
-    if (filters.title.trim() !== '') {
+    if (!searchOrigin && filters.title.trim() !== '') {
       const query = filters.title.toLowerCase();
       filtered = filtered.filter(
         (r) =>
@@ -85,8 +91,9 @@ export default function MapView() {
       );
     }
 
-    if (filters.category !== 'All') {
-      filtered = filtered.filter((r) => r.category === filters.category);
+    const selectedCategories = filters.categories ?? [];
+    if (selectedCategories.length > 0) {
+      filtered = filtered.filter((r) => selectedCategories.includes(r.category));
     }
 
     if (filters.city !== '') {
@@ -97,8 +104,24 @@ export default function MapView() {
       filtered = filtered.filter((r) => r.state === filters.state);
     }
 
+    if (searchOrigin) {
+      const distMap: Record<string, number> = {};
+      filtered = filtered
+        .map((r) => {
+          const d = haversineKm(searchOrigin[0], searchOrigin[1], r.locationLat, r.locationLng);
+          distMap[r.id] = d;
+          return { r, d };
+        })
+        .filter(({ d }) => d <= 20)
+        .sort((a, b) => a.d - b.d)
+        .map(({ r }) => r);
+      setDistances(distMap);
+    } else {
+      setDistances({});
+    }
+
     setFilteredResponders(filtered);
-  }, [filters, responders]);
+  }, [filters, responders, searchOrigin]);
 
   const handleResponderClick = (responder: FirstResponder) => {
     setSelectedResponder(responder);
@@ -125,10 +148,24 @@ export default function MapView() {
   const closeInfoCard = () => {
     setSelectedResponder(null);
   };
+
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
   const handleResetFilters = () => {
-    setFilters({ title: '', category: 'All', city: '', state: '' });
+    setFilters({ title: '', category: 'All', categories: [], city: '', state: '' });
     setSelectedResponder(null);
     setMapCenter(null);
+    setSearchOrigin(null);
+    setDistances({});
     setSettingsOpen(false);
   };
 
@@ -139,20 +176,69 @@ export default function MapView() {
     setSettingsOpen(false);
   };
 
+  const fetchSuggestions = async (query: string) => {
+    if (!query || query.length < 2) {
+      setSearchSuggestions([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+          query
+        )}&format=json&limit=5&countrycodes=in`
+      );
+      const data = await resp.json();
+      const mapped = (data || []).map((item: any) => ({
+        label: item.display_name as string,
+        lat: Number(item.lat),
+        lon: Number(item.lon),
+      }));
+      setSearchSuggestions(mapped);
+    } catch (e) {
+      console.error('Geocode error', e);
+      setSearchSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleTitleChange = (value: string) => {
+    setFilters((prev) => ({ ...prev, title: value }));
+    setSearchOrigin(null);
+    setDistances({});
+    fetchSuggestions(value);
+  };
+
+  const handleSuggestionSelect = (s: { label: string; lat: number; lon: number }) => {
+    setFilters((prev) => ({ ...prev, title: s.label }));
+    const center: [number, number] = [s.lat, s.lon];
+    setMapCenter(center);
+    setSearchOrigin(center);
+    setSearchSuggestions([]);
+  };
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-lg z-30 flex-shrink-0">
+      <header className="bg-white text-white shadow-lg z-30 flex-shrink-0">
         <div className="container mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6 sm:w-8 sm:h-8" />
-              <div>
+                <Image
+                  src="/logo.webp"
+                  alt="Keystone GeoResponse"
+                  width={140}
+                  height={40}
+                  className="h-10 w-auto sm:h-12"
+                  priority
+                />
+              {/* <div>
                 <h1 className="text-lg sm:text-2xl font-bold">Keystone GeoResponse</h1>
                 <p className="text-blue-200 text-xs sm:text-sm">
                   {responders.length} First Responders across India
                 </p>
-              </div>
+              </div> */}
             </div>
             <div className="flex items-center gap-2 relative">
               <button
@@ -210,6 +296,10 @@ export default function MapView() {
           <Filters
             filters={filters}
             onFilterChange={setFilters}
+            onTitleChange={handleTitleChange}
+            suggestions={searchSuggestions}
+            onSuggestionSelect={handleSuggestionSelect}
+            searchLoading={searchLoading}
             availableCities={availableCities}
             availableStates={availableStates}
             resultCount={filteredResponders.length}
@@ -276,6 +366,11 @@ export default function MapView() {
                         <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                           {responder.address}
                         </p>
+                        {typeof distances[responder.id] === 'number' && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            {distances[responder.id].toFixed(1)} km away
+                          </p>
+                        )}
                         <p className="text-xs text-blue-600 mt-1">{responder.phoneNumber}</p>
                       </div>
                     </div>
@@ -329,6 +424,11 @@ export default function MapView() {
                       <p className="text-gray-700">
                         <span className="font-semibold">Phone:</span> {responder.phoneNumber}
                       </p>
+                      {typeof distances[responder.id] === 'number' && (
+                        <p className="text-blue-600">
+                          <span className="font-semibold">Distance:</span> {distances[responder.id].toFixed(1)} km
+                        </p>
+                      )}
                     </div>
                   </div>
                 </Popup>
@@ -344,7 +444,11 @@ export default function MapView() {
           {/* Info Card Overlay */}
           {selectedResponder && (
             <div className="absolute top-4 left-4 right-4 md:left-auto md:right-4 md:w-auto z-[1000]">
-              <InfoCard responder={selectedResponder} onClose={closeInfoCard} />
+              <InfoCard
+                responder={selectedResponder}
+                distanceKm={distances[selectedResponder.id]}
+                onClose={closeInfoCard}
+              />
             </div>
           )}
         </div>
