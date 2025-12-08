@@ -45,6 +45,7 @@ export default function MapView() {
   const [adminEmail, setAdminEmail] = useState('admin@keystone.app');
   const [adminPassword, setAdminPassword] = useState('demo1234');
   const [showPassword, setShowPassword] = useState(false);
+  const [adminError, setAdminError] = useState('');
   const [filters, setFilters] = useState<FilterState>({
     title: '',
     category: 'All',
@@ -382,6 +383,7 @@ export default function MapView() {
                   type="email"
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
+                  onFocus={() => setAdminError('')}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                   placeholder="admin@keystone.app"
                 />
@@ -393,6 +395,7 @@ export default function MapView() {
                     type={showPassword ? 'text' : 'password'}
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
+                    onFocus={() => setAdminError('')}
                     className="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                     placeholder="••••••••"
                   />
@@ -406,9 +409,14 @@ export default function MapView() {
                   </button>
                 </div>
               </div>
+              {adminError && <p className="text-sm text-red-600">{adminError}</p>}
               <button
                 onClick={() => {
-                  window.location.href = '/admin';
+                  if (adminEmail === 'admin@keystone.app' && adminPassword === 'demo1234') {
+                    window.location.href = '/admin';
+                  } else {
+                    setAdminError('Invalid email or password.');
+                  }
                 }}
                 className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
               >
