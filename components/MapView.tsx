@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Shield, MapPin, Navigation, Menu, X, Settings } from 'lucide-react';
+import { Shield, MapPin, Navigation, Menu, X, Settings, Eye, EyeOff } from 'lucide-react';
 import { FirstResponder, FilterState } from '@/types';
 import { dummyFirstResponders } from '@/data/dummyData';
 import { createCategoryIcon } from '@/lib/mapIcons';
@@ -44,6 +44,7 @@ export default function MapView() {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminEmail, setAdminEmail] = useState('admin@keystone.app');
   const [adminPassword, setAdminPassword] = useState('demo1234');
+  const [showPassword, setShowPassword] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     title: '',
     category: 'All',
@@ -387,13 +388,23 @@ export default function MapView() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((p) => !p)}
+                    className="absolute inset-y-0 right-2 px-2 flex items-center text-gray-500 hover:text-gray-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
               <button
                 onClick={() => {
