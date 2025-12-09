@@ -13,6 +13,7 @@ interface FiltersProps {
   availableCities: string[];
   availableStates: string[];
   resultCount: number;
+  onClearAll?: () => void;
 }
 
 const categories: (Category | 'All')[] = [
@@ -32,6 +33,7 @@ export default function Filters({
   availableCities,
   availableStates,
   resultCount,
+  onClearAll,
 }: FiltersProps) {
   const handleChange = (key: keyof FilterState, value: string) => {
     onFilterChange({
@@ -43,8 +45,9 @@ export default function Filters({
   const selectedCategories = filters.categories ?? [];
 
   const toggleCategory = (cat: Category) => {
+    // single-select behavior: select only one at a time; tapping again clears
     const exists = selectedCategories.includes(cat);
-    const next = exists ? selectedCategories.filter((c) => c !== cat) : [...selectedCategories, cat];
+    const next = exists ? [] : [cat];
     onFilterChange({
       ...filters,
       categories: next,
@@ -61,12 +64,17 @@ export default function Filters({
   };
 
   const clearFilters = () => {
-    onFilterChange({
-      title: '',
-      category: 'All',
-      city: '',
-      state: '',
-    });
+    if (onClearAll) {
+      onClearAll();
+    } else {
+      onFilterChange({
+        title: '',
+        category: 'All',
+        categories: [],
+        city: '',
+        state: '',
+      });
+    }
   };
 
   const hasActiveFilters =

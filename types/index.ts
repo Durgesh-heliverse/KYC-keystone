@@ -26,5 +26,6 @@ export interface GeoSuggestion {
   label: string;
   lat: number;
   lon: number;
+  placeId?: string;
 }
 

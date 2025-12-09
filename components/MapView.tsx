@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import Image from 'next/image';
 import { Shield, MapPin, Navigation, Menu, X, Settings, Eye, EyeOff } from 'lucide-react';
-import { FirstResponder, FilterState } from '@/types';
-import { dummyFirstResponders } from '@/data/dummyData';
+import { FirstResponder, FilterState, GeoSuggestion } from '@/types';
 import { createCategoryIcon } from '@/lib/mapIcons';
+import { getAllLocations, getClosestLocations, getNearbyLocations } from '@/lib/api';
+import { initGooglePlaces, getAutocompleteSuggestions, getPlaceDetails, refreshSessionToken } from '@/lib/googlePlaces';
 import Filters from './Filters';
 import InfoCard from './InfoCard';
 import MapController from './MapController';
@@ -47,10 +48,13 @@ export default function MapView() {
   const [adminPassword, setAdminPassword] = useState('demo1234');
   const [showPassword, setShowPassword] = useState(false);
   const [adminError, setAdminError] = useState('');
-  const [searchSuggestions, setSearchSuggestions] = useState<{ label: string; lat: number; lon: number }[]>([]);
+  const [searchSuggestions, setSearchSuggestions] = useState<GeoSuggestion[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchOrigin, setSearchOrigin] = useState<[number, number] | null>(null);
   const [distances, setDistances] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [googlePlacesReady, setGooglePlacesReady] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     title: '',
     category: 'All',
@@ -59,11 +63,37 @@ export default function MapView() {
     state: '',
   });
 
-  // Load dummy data
+  // Initialize Google Places API
   useEffect(() => {
-    setResponders(dummyFirstResponders);
-    setFilteredResponders(dummyFirstResponders);
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      initGooglePlaces(apiKey)
+        .then(() => {
+          setGooglePlacesReady(true);
+        })
+        .catch((error) => {
+          console.error('Failed to initialize Google Places:', error);
+        });
+    }
   }, []);
+
+  const loadLocations = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getAllLocations();
+      setResponders(data);
+      setFilteredResponders(data);
+    } catch (error) {
+      console.error('Error loading locations:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load all locations from backend on mount
+  useEffect(() => {
+    loadLocations();
+  }, [loadLocations]);
 
   // Get unique cities and states
   const availableCities = useMemo(() => {
@@ -76,52 +106,39 @@ export default function MapView() {
     return Array.from(states).sort();
   }, [responders]);
 
-  // Filter responders based on filters
+  // Derive selected category (single-select)
+  const selectedCategory = useMemo(() => {
+    if (filters.categories && filters.categories.length > 0) return filters.categories[0];
+    if (filters.category !== 'All') return filters.category;
+    return undefined;
+  }, [filters.categories, filters.category]);
+
+  // Fetch from backend when filters change (no search origin)
   useEffect(() => {
-    let filtered = [...responders];
+    if (searchOrigin) return; // location-based flow handled elsewhere
 
-    if (!searchOrigin && filters.title.trim() !== '') {
-      const query = filters.title.toLowerCase();
-      filtered = filtered.filter(
-        (r) =>
-          r.title.toLowerCase().includes(query) ||
-          r.city.toLowerCase().includes(query) ||
-          r.state.toLowerCase().includes(query) ||
-          r.address.toLowerCase().includes(query)
-      );
-    }
+    const loadFiltered = async () => {
+      setLoading(true);
+      try {
+        const data = await getAllLocations({
+          category: selectedCategory,
+          cityName: filters.city || undefined,
+          address: filters.title || undefined,
+        });
+        setResponders(data);
+        setFilteredResponders(data);
+        setDistances({});
+      } catch (error) {
+        console.error('Error loading filtered locations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const selectedCategories = filters.categories ?? [];
-    if (selectedCategories.length > 0) {
-      filtered = filtered.filter((r) => selectedCategories.includes(r.category));
-    }
+    loadFiltered();
+  }, [filters.title, filters.city, filters.state, filters.categories, filters.category, selectedCategory, searchOrigin]);
 
-    if (filters.city !== '') {
-      filtered = filtered.filter((r) => r.city === filters.city);
-    }
-
-    if (filters.state !== '') {
-      filtered = filtered.filter((r) => r.state === filters.state);
-    }
-
-    if (searchOrigin) {
-      const distMap: Record<string, number> = {};
-      filtered = filtered
-        .map((r) => {
-          const d = haversineKm(searchOrigin[0], searchOrigin[1], r.locationLat, r.locationLng);
-          distMap[r.id] = d;
-          return { r, d };
-        })
-        .filter(({ d }) => d <= 20)
-        .sort((a, b) => a.d - b.d)
-        .map(({ r }) => r);
-      setDistances(distMap);
-    } else {
-      setDistances({});
-    }
-
-    setFilteredResponders(filtered);
-  }, [filters, responders, searchOrigin]);
+  // If searchOrigin exists, distances already computed in handleSuggestionSelect; keep list as-is
 
   const handleResponderClick = (responder: FirstResponder) => {
     setSelectedResponder(responder);
@@ -167,6 +184,7 @@ export default function MapView() {
     setSearchOrigin(null);
     setDistances({});
     setSettingsOpen(false);
+    loadLocations();
   };
 
   const contactSupport = () => {
@@ -176,12 +194,7 @@ export default function MapView() {
     setSettingsOpen(false);
   };
 
-  const fetchSuggestions = async (query: string) => {
-    if (!query || query.length < 2) {
-      setSearchSuggestions([]);
-      return;
-    }
-    setSearchLoading(true);
+  const fetchFallbackSuggestions = async (query: string) => {
     try {
       const resp = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
@@ -189,14 +202,48 @@ export default function MapView() {
         )}&format=json&limit=5&countrycodes=in`
       );
       const data = await resp.json();
-      const mapped = (data || []).map((item: any) => ({
+      return (data || []).map((item: any) => ({
         label: item.display_name as string,
         lat: Number(item.lat),
         lon: Number(item.lon),
-      }));
+        placeId: undefined,
+      })) as GeoSuggestion[];
+    } catch (error) {
+      console.error('Fallback geocode error', error);
+      return [];
+    }
+  };
+
+  const fetchSuggestions = async (query: string) => {
+    if (!query || query.length < 1) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      let mapped: GeoSuggestion[] = [];
+
+      if (googlePlacesReady) {
+        const suggestions = await getAutocompleteSuggestions(query, {
+          includedRegionCodes: ['in'],
+        });
+        mapped = suggestions.map((s) => ({
+          label: s.text,
+          lat: 0, // Will be fetched when selected
+          lon: 0,
+          placeId: s.placeId,
+        }));
+      }
+
+      // If Places not ready or returned nothing, fallback to Nominatim
+      if (!googlePlacesReady || mapped.length === 0) {
+        mapped = await fetchFallbackSuggestions(query);
+      }
+
       setSearchSuggestions(mapped);
     } catch (e) {
-      console.error('Geocode error', e);
+      console.error('Autocomplete error', e);
       setSearchSuggestions([]);
     } finally {
       setSearchLoading(false);
@@ -207,15 +254,88 @@ export default function MapView() {
     setFilters((prev) => ({ ...prev, title: value }));
     setSearchOrigin(null);
     setDistances({});
-    fetchSuggestions(value);
+
+    // Debounce the search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchSuggestions(value);
+    }, 300);
   };
 
-  const handleSuggestionSelect = (s: { label: string; lat: number; lon: number }) => {
-    setFilters((prev) => ({ ...prev, title: s.label }));
-    const center: [number, number] = [s.lat, s.lon];
-    setMapCenter(center);
-    setSearchOrigin(center);
+  const handleSuggestionSelect = async (s: GeoSuggestion) => {
+    setSearchLoading(true);
     setSearchSuggestions([]);
+
+    try {
+      let lat = s.lat;
+      let lon = s.lon;
+      let displayName = s.label;
+
+      // If we have a placeId, fetch full details
+      if (s.placeId) {
+        const placeDetails = await getPlaceDetails(s.placeId);
+        if (placeDetails) {
+          lat = placeDetails.location.lat;
+          lon = placeDetails.location.lng;
+          displayName = placeDetails.displayName || placeDetails.formattedAddress;
+        }
+      }
+
+      console.log('Selected place:', {
+        displayName,
+        lat,
+        lon,
+        placeId: s.placeId,
+      });
+
+      setFilters((prev) => ({ ...prev, title: displayName }));
+      const center: [number, number] = [lat, lon];
+      setMapCenter(center);
+      setSearchOrigin(center);
+
+      // Fetch nearby first; if none, fallback to closest
+      const nearby = await getNearbyLocations(lat, lon, { radiusKm: 20, limit: 50, category: selectedCategory });
+      const closest = nearby.length === 0
+        ? await getClosestLocations(lat, lon, { limit: 20, category: selectedCategory })
+        : [];
+
+      // Combine and deduplicate by ID
+      const allResults = [...nearby, ...closest];
+      const uniqueResults = Array.from(new Map(allResults.map((item) => [item.id, item])).values());
+
+      // Calculate distances
+      const newDistances: Record<string, number> = {};
+      uniqueResults.forEach((r) => {
+        const dist = haversineKm(lat, lon, r.locationLat, r.locationLng);
+        newDistances[r.id] = dist;
+      });
+
+      // Sort by distance
+      uniqueResults.sort((a, b) => {
+        const distA = newDistances[a.id] || Infinity;
+        const distB = newDistances[b.id] || Infinity;
+        return distA - distB;
+      });
+
+      console.log('Locations after closest/nearby:', {
+        count: uniqueResults.length,
+        sample: uniqueResults.slice(0, 5),
+      });
+
+      setResponders(uniqueResults);
+      setFilteredResponders(uniqueResults);
+      setDistances(newDistances);
+
+      // Refresh session token for next search
+      refreshSessionToken();
+    } catch (error) {
+      console.error('Error selecting place:', error);
+    } finally {
+      setSearchLoading(false);
+    }
   };
 
   return (
@@ -303,11 +423,19 @@ export default function MapView() {
             availableCities={availableCities}
             availableStates={availableStates}
             resultCount={filteredResponders.length}
+            onClearAll={handleResetFilters}
           />
 
           {/* Search Results List */}
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {filteredResponders.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center h-full text-gray-400 p-8 text-center">
+                <div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-lg">Loading locations...</p>
+                </div>
+              </div>
+            ) : filteredResponders.length === 0 ? (
               <div className="flex items-center justify-center h-full text-gray-400 p-8 text-center">
                 <div>
                   <MapPin className="w-16 h-16 mx-auto mb-4 opacity-50" />

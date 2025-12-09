@@ -11,7 +11,7 @@ export const createCategoryIcon = (category: Category): Icon => {
       case 'Ambulance':
         return '#16a34a'; // Green
       case 'Hospital':
-        return '#ea580c'; // Orange
+        return '#ffffff'; // White fill for hospital
       case 'Emergency':
         return '#7c3aed'; // Purple
       default:
@@ -40,7 +40,7 @@ export const createCategoryIcon = (category: Category): Icon => {
   const path = getIconPath(category);
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5">
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="${color}" stroke="${category === 'Hospital' ? '#1e3a8a' : 'white'}" stroke-width="1.5">
       <path d="${path}"/>
     </svg>
   `;
