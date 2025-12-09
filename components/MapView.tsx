@@ -59,8 +59,8 @@ function SearchLocationMarker({ position }: { position: [number, number] }) {
 }
 
 export default function MapView() {
-  const [responders, setResponders] = useState<FirstResponder[]>([]);
-  const [filteredResponders, setFilteredResponders] = useState<FirstResponder[]>([]);
+  const [responders, setResponders] = useState<FirstResponder[]>([]); // full list
+  const [filteredResponders, setFilteredResponders] = useState<FirstResponder[]>([]); // UI list
   const [selectedResponder, setSelectedResponder] = useState<FirstResponder | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [mapZoom, setMapZoom] = useState<number | null>(null);
@@ -119,10 +119,28 @@ export default function MapView() {
   }, [loadLocations]);
 
   // Get unique cities and states
-  const availableCities = useMemo(() => {
-    const cities = new Set(responders.map((r) => r.city));
-    return Array.from(cities).sort();
+  const cityStateMap = useMemo(() => {
+    const map = new Map<string, string>();
+    responders.forEach((r) => {
+      if (r.city && r.state) {
+        map.set(r.city, r.state);
+      }
+    });
+    return map;
   }, [responders]);
+
+  const availableCities = useMemo(() => {
+    if (!filters.state) {
+      const cities = new Set(responders.map((r) => r.city));
+      return Array.from(cities).sort();
+    }
+    const cities = new Set(
+      responders
+        .filter((r) => r.state === filters.state)
+        .map((r) => r.city)
+    );
+    return Array.from(cities).sort();
+  }, [responders, filters.state]);
 
   const availableStates = useMemo(() => {
     const states = new Set(responders.map((r) => r.state));
@@ -148,8 +166,13 @@ export default function MapView() {
           cityName: filters.city || undefined,
           address: filters.title || undefined,
         });
+        // responders stays as the full backend response so states list remains complete
         setResponders(data);
-        setFilteredResponders(data);
+
+        const filteredData = filters.state
+          ? data.filter((r) => r.state === filters.state)
+          : data;
+        setFilteredResponders(filteredData);
         setDistances({});
       } catch (error) {
         console.error('Error loading filtered locations:', error);
@@ -160,6 +183,16 @@ export default function MapView() {
 
     loadFiltered();
   }, [filters.title, filters.city, filters.state, filters.categories, filters.category, selectedCategory, searchOrigin]);
+
+  // Clear city when state changes and the city is not in that state
+  useEffect(() => {
+    if (filters.state && filters.city) {
+      const cityState = cityStateMap.get(filters.city);
+      if (cityState !== filters.state) {
+        setFilters((prev) => ({ ...prev, city: '' }));
+      }
+    }
+  }, [filters.state, filters.city, cityStateMap]);
 
   // If searchOrigin exists, distances already computed in handleSuggestionSelect; keep list as-is
 
