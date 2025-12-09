@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import Image from 'next/image';
-import { Shield, MapPin, Navigation, Menu, X, Settings, Eye, EyeOff } from 'lucide-react';
+import { Shield, MapPin, Navigation, Menu, X, Settings, Eye, EyeOff, FlameKindling, Building2 } from 'lucide-react';
 import { FirstResponder, FilterState, GeoSuggestion } from '@/types';
 import { createCategoryIcon } from '@/lib/mapIcons';
 import { getAllLocations, getClosestLocations, getNearbyLocations } from '@/lib/api';
@@ -37,11 +37,33 @@ function LocationButton({ onLocationClick }: { onLocationClick: () => void }) {
   );
 }
 
+function SearchLocationMarker({ position }: { position: [number, number] }) {
+  const L = require('leaflet');
+  const redIcon = new L.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+  });
+  
+  return (
+    <Marker position={position} icon={redIcon}>
+      <Popup>
+        <div className="p-2">
+          <p className="font-semibold text-sm">Searched Location</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
 export default function MapView() {
   const [responders, setResponders] = useState<FirstResponder[]>([]);
   const [filteredResponders, setFilteredResponders] = useState<FirstResponder[]>([]);
   const [selectedResponder, setSelectedResponder] = useState<FirstResponder | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -144,6 +166,7 @@ export default function MapView() {
   const handleResponderClick = (responder: FirstResponder) => {
     setSelectedResponder(responder);
     setMapCenter([responder.locationLat, responder.locationLng]);
+    setMapZoom(null); // Clear zoom so it uses default (15) for location clicks
   };
 
   const handleMyLocation = () => {
@@ -152,6 +175,7 @@ export default function MapView() {
         (position) => {
           const { latitude, longitude } = position.coords;
           setMapCenter([latitude, longitude]);
+          setMapZoom(null); // Clear zoom so it uses default (15) for location
         },
         (error) => {
           console.error('Error getting location:', error);
@@ -181,7 +205,8 @@ export default function MapView() {
   const handleResetFilters = () => {
     setFilters({ title: '', category: 'All', categories: [], city: '', state: '' });
     setSelectedResponder(null);
-    setMapCenter(null);
+    setMapCenter([20.5937, 78.9629]); // Reset to India center
+    setMapZoom(5); // Reset to default zoom
     setSearchOrigin(null);
     setDistances({});
     setSettingsOpen(false);
@@ -295,6 +320,7 @@ export default function MapView() {
       setFilters((prev) => ({ ...prev, title: displayName }));
       const center: [number, number] = [lat, lon];
       setMapCenter(center);
+      setMapZoom(null); // Clear zoom so it uses default (15) for search location
       setSearchOrigin(center);
 
       // Fetch nearby first; if none, fallback to closest
@@ -392,9 +418,9 @@ export default function MapView() {
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white text-white shadow-lg z-30 flex-shrink-0">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
+      <header className="bg-white shadow-lg z-30 flex-shrink-0">
+        <div className="container mx-auto px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
                 <Image
                   src="/logo.webp"
@@ -404,17 +430,57 @@ export default function MapView() {
                   className="h-10 w-auto sm:h-12"
                   priority
                 />
-              {/* <div>
-                <h1 className="text-lg sm:text-2xl font-bold">Keystone GeoResponse</h1>
-                <p className="text-blue-200 text-xs sm:text-sm">
-                  {responders.length} First Responders across India
-                </p>
-              </div> */}
             </div>
             <div className="flex items-center gap-2 relative">
+              {/* Category Filter Tabs - Desktop Only, Left-aligned near Settings */}
+              <div className="hidden md:flex items-center gap-2 mr-2">
+                {[
+                  { key: 'Police' as const, label: 'Police', icon: <Shield className="w-4 h-4" /> },
+                  { key: 'Fire' as const, label: 'Fire', icon: <FlameKindling className="w-4 h-4" /> },
+                  { key: 'Hospital' as const, label: 'Hospital', icon: <Building2 className="w-4 h-4" /> },
+                ].map((item) => {
+                  const active = filters.categories?.includes(item.key) || false;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        const exists = filters.categories?.includes(item.key);
+                        const next = exists ? [] : [item.key];
+                        setFilters({
+                          ...filters,
+                          categories: next,
+                          category: 'All',
+                        });
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm whitespace-nowrap transition ${
+                        active
+                          ? 'bg-blue-50 border-blue-200 text-blue-700'
+                          : 'bg-white border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </button>
+                  );
+                })}
+                {filters.categories && filters.categories.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setFilters({
+                        ...filters,
+                        categories: [],
+                        category: 'All',
+                      });
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setSettingsOpen((prev) => !prev)}
-                className="flex items-center gap-2 px-3 py-2 bg-blue-800 hover:bg-blue-900 rounded-lg transition-colors text-sm"
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm text-white"
               >
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Settings</span>
@@ -572,7 +638,7 @@ export default function MapView() {
             style={{ height: '100%', width: '100%' }}
             className="z-0"
           >
-            <MapController center={mapCenter} zoom={15} />
+            <MapController center={mapCenter} zoom={mapZoom || (mapCenter ? 15 : 5)} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -583,6 +649,9 @@ export default function MapView() {
               onMarkerClick={handleResponderClick}
               distances={distances}
             />
+            
+            {/* Red pin marker for searched location */}
+            {searchOrigin && <SearchLocationMarker position={searchOrigin} />}
           </MapContainer>
 
           {/* My Location Button */}

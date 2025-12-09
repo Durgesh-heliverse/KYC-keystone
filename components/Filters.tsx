@@ -122,8 +122,8 @@ export default function Filters({
         )}
       </div>
 
-      {/* Category Tabs (multi-select) */}
-      <div className="space-y-2">
+      {/* Category Tabs (multi-select) - Mobile Only */}
+      <div className="space-y-2 md:hidden">
         <div className="flex items-center justify-between">
           <label className="block text-sm font-medium text-gray-700">Category</label>
           {selectedCategories.length > 0 && (
