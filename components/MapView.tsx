@@ -297,10 +297,15 @@ export default function MapView() {
       setSearchOrigin(center);
 
       // Fetch nearby first; if none, fallback to closest
-      const nearby = await getNearbyLocations(lat, lon, { radiusKm: 20, limit: 50, category: selectedCategory });
-      const closest = nearby.length === 0
-        ? await getClosestLocations(lat, lon, { limit: 20, category: selectedCategory })
-        : [];
+      const nearby = await getNearbyLocations(lat, lon, {
+        radiusKm: 20,
+        limit: 50,
+        category: selectedCategory,
+      });
+      const closest =
+        nearby.length === 0
+          ? await getClosestLocations(lat, lon, { limit: 20, category: selectedCategory })
+          : [];
 
       // Combine and deduplicate by ID
       const allResults = [...nearby, ...closest];
@@ -337,6 +342,51 @@ export default function MapView() {
       setSearchLoading(false);
     }
   };
+
+  // Re-run nearby/closest when category changes while a search origin exists
+  useEffect(() => {
+    const refetchAroundOrigin = async () => {
+      if (!searchOrigin) return;
+      const [lat, lon] = searchOrigin;
+      setLoading(true);
+      try {
+        const nearby = await getNearbyLocations(lat, lon, {
+          radiusKm: 20,
+          limit: 50,
+          category: selectedCategory,
+        });
+        const closest =
+          nearby.length === 0
+            ? await getClosestLocations(lat, lon, { limit: 20, category: selectedCategory })
+            : [];
+
+        const allResults = [...nearby, ...closest];
+        const uniqueResults = Array.from(new Map(allResults.map((item) => [item.id, item])).values());
+
+        const newDistances: Record<string, number> = {};
+        uniqueResults.forEach((r) => {
+          const dist = haversineKm(lat, lon, r.locationLat, r.locationLng);
+          newDistances[r.id] = dist;
+        });
+
+        uniqueResults.sort((a, b) => {
+          const distA = newDistances[a.id] || Infinity;
+          const distB = newDistances[b.id] || Infinity;
+          return distA - distB;
+        });
+
+        setResponders(uniqueResults);
+        setFilteredResponders(uniqueResults);
+        setDistances(newDistances);
+      } catch (error) {
+        console.error('Error reloading around origin:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    refetchAroundOrigin();
+  }, [searchOrigin, selectedCategory]);
 
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden">
