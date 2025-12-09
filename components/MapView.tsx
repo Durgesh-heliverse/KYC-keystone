@@ -11,6 +11,7 @@ import { initGooglePlaces, getAutocompleteSuggestions, getPlaceDetails, refreshS
 import Filters from './Filters';
 import InfoCard from './InfoCard';
 import MapController from './MapController';
+import MarkerClusterGroup from './MarkerClusterGroup';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default marker icons in Next.js
@@ -41,7 +42,7 @@ export default function MapView() {
   const [filteredResponders, setFilteredResponders] = useState<FirstResponder[]>([]);
   const [selectedResponder, setSelectedResponder] = useState<FirstResponder | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminEmail, setAdminEmail] = useState('admin@keystone.app');
@@ -445,10 +446,10 @@ export default function MapView() {
               )}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="md:hidden p-2 hover:bg-blue-800 rounded-lg transition-colors"
+                className="md:hidden p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                 aria-label="Toggle sidebar"
               >
-                {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {sidebarOpen ? <X className="w-6 h-6 text-white" /> : <Menu className="w-6 h-6 text-white" />}
               </button>
             </div>
           </div>
@@ -577,41 +578,11 @@ export default function MapView() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {filteredResponders.map((responder) => (
-              <Marker
-                key={responder.id}
-                position={[responder.locationLat, responder.locationLng]}
-                icon={createCategoryIcon(responder.category)}
-                eventHandlers={{
-                  click: () => handleResponderClick(responder),
-                }}
-              >
-                <Popup>
-                  <div className="p-2 min-w-[200px]">
-                    <h3 className="font-bold text-lg mb-2">{responder.title}</h3>
-                    <div className="space-y-1 text-sm">
-                      <p className="text-gray-700">
-                        <span className="font-semibold">Category:</span> {responder.category}
-                      </p>
-                      <p className="text-gray-700">
-                        <span className="font-semibold">City:</span> {responder.city}
-                      </p>
-                      <p className="text-gray-700">
-                        <span className="font-semibold">State:</span> {responder.state}
-                      </p>
-                      <p className="text-gray-700">
-                        <span className="font-semibold">Phone:</span> {responder.phoneNumber}
-                      </p>
-                      {typeof distances[responder.id] === 'number' && (
-                        <p className="text-blue-600">
-                          <span className="font-semibold">Distance:</span> {distances[responder.id].toFixed(1)} km
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            <MarkerClusterGroup
+              markers={filteredResponders}
+              onMarkerClick={handleResponderClick}
+              distances={distances}
+            />
           </MapContainer>
 
           {/* My Location Button */}
