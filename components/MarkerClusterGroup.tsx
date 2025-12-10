@@ -5,15 +5,16 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { FirstResponder } from '@/types';
-import { createCategoryIcon, createSmallCategoryIcon } from '@/lib/mapIcons';
+import { createSmallCategoryIcon, createSelectedCategoryIcon } from '@/lib/mapIcons';
 
 interface MarkerClusterGroupProps {
   markers: FirstResponder[];
   onMarkerClick: (responder: FirstResponder) => void;
   distances?: Record<string, number>;
+  selectedResponderId?: string | null;
 }
 
-export default function MarkerClusterGroup({ markers, onMarkerClick, distances }: MarkerClusterGroupProps) {
+export default function MarkerClusterGroup({ markers, onMarkerClick, distances, selectedResponderId }: MarkerClusterGroupProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -62,12 +63,16 @@ export default function MarkerClusterGroup({ markers, onMarkerClick, distances }
 
     // Add markers to cluster group
     markers.forEach((responder) => {
-      const icon = createSmallCategoryIcon(responder.category);
+      const isSelected = selectedResponderId === responder.id;
+      const icon = isSelected ? createSelectedCategoryIcon(responder.category) : createSmallCategoryIcon(responder.category);
       const marker = L.marker([responder.locationLat, responder.locationLng], { 
         icon
       });
       // Store category on marker object for cluster icon determination
       (marker as any).category = responder.category;
+      if (isSelected) {
+        marker.setZIndexOffset(1000);
+      }
 
       // Create popup content
       const popupContent = `
@@ -110,7 +115,7 @@ export default function MarkerClusterGroup({ markers, onMarkerClick, distances }
     return () => {
       map.removeLayer(markerClusterGroup);
     };
-  }, [map, markers, onMarkerClick, distances]);
+  }, [map, markers, onMarkerClick, distances, selectedResponderId]);
 
   return null;
 }

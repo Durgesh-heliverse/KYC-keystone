@@ -681,6 +681,7 @@ export default function MapView() {
               markers={filteredResponders}
               onMarkerClick={handleResponderClick}
               distances={distances}
+              selectedResponderId={selectedResponder?.id}
             />
             
             {/* Red pin marker for searched location */}
